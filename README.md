@@ -6,10 +6,10 @@
 │   │   ├── 📄 settings.py    # Configuración centralizada (NUEVO)
 │   │   └── 📄 __init__.py
 │   │
-│   ├── 📂 monitor/                  
+│   ├── 📂 Event/                  
 │   │   └── 📄 detector_archivos.py
 │   │
-│   ├── 📂 automation/             
+│   ├── 📂 Robot/             
 │   │   └── 📄 control_navegador.py
 │   │
 │   └── 📂 utils/              # Utilidades comunes
@@ -20,9 +20,7 @@
 │   └── 📄 selectores.json
 │
 ├── 📂 logs/                  
-├── 📄 .env                   
-├── 📄 .env.example           
+├── 📄 .env                            
 ├── 📄 main.py               # Punto de entrada principal
 ├── 📄 requirements.txt
 └── 📄 README.md
-```.
