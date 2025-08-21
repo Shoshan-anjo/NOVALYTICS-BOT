@@ -1,0 +1,72 @@
+{
+  "app": {
+    "name": "NOVALYTICS-BOT",
+    "version": "1.0.0",
+    "environment": "development",
+    "log_level": "INFO"
+  },
+
+  "urls": {
+    "base_url": "{{BASE_URL}}",
+    "home_url": "{{BASE_URL}}",
+    "login_url": "{{BASE_URL}}/login",
+    "configuracion_url": "{{BASE_URL}}/configuracion",
+    "analisis_url": "{{BASE_URL}}/iniciar-analisis",
+    "timeout": 30000,
+    "navigation_timeout": 60000
+  },
+
+  "paths": {
+    "shared_folder": "{{SHARED_FOLDER}}",
+    "downloads_folder": "./data/downloads",
+    "uploads_folder": "./data/uploads",
+    "screenshots_folder": "./data/screenshots",
+    "reports_folder": "./data/reports",
+    "backup_folder": "./data/backups"
+  },
+
+  "analisis": {
+    "default_parametro": "{{ANALISIS_DEFAULT_PARAMETRO}}",
+    "default_servicio": "{{ANALISIS_DEFAULT_SERVICIO}}",
+    "allowed_file_extensions": [".xlsx", ".xls"],
+    "max_file_size_mb": 50,
+    "wait_after_upload_ms": 2000,
+    "wait_after_submit_ms": 10000
+  },
+
+  "browser": {
+    "headless": "{{BROWSER_HEADLESS}}",
+    "slow_mo": 100,
+    "viewport_width": 1280,
+    "viewport_height": 720,
+    "timeout": 30000,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  },
+
+  "monitoring": {
+    "check_interval_seconds": 60,
+    "allowed_extensions": [".xlsx", ".xls", ".csv"],
+    "delete_after_processing": false,
+    "move_processed_files": true,
+    "processed_folder": "./data/processed"
+  },
+
+  "retry": {
+    "max_attempts": 3,
+    "delay_between_attempts_ms": 2000,
+    "timeout_per_attempt_ms": 15000
+  },
+
+  "credentials": {
+    "username": "{{APP_USERNAME}}",
+    "password": "{{APP_PASSWORD}}"
+  },
+
+  "schedule": {
+    "enabled": false,
+    "start_time": "09:00",
+    "end_time": "18:00",
+    "run_on_weekends": false,
+    "timezone": "America/Mexico_City"
+  }
+}

@@ -1,26 +1,39 @@
 # Novalitics_Bot
 
 ```bash
-├── 📂 src/                    # Carpeta principal del código fuente
+Novalitics_Bot/
+├── 📂 src/                    # TODO el código fuente aquí
 │   ├── 📂 core/              # Módulos centrales
-│   │   ├── 📄 settings.py    # Configuración centralizada (NUEVO)
-│   │   └── 📄 __init__.py
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 settings.py    # Configuración
+│   │   └── 📄 logger.py      # Logging configurado
 │   │
-│   ├── 📂 Event/                  
-│   │   └── 📄 detector_archivos.py
+│   ├── 📂 event/             # Eventos/Monitoreo (minúscula)
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 file_monitor.py # detector_archivos.py → nombre inglés
 │   │
-│   ├── 📂 Robot/             
-│   │   └── 📄 control_navegador.py
+│   ├── 📂 robot/             # Automatización (minúscula) 
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 browser_control.py # control_navegador.py → inglés
 │   │
-│   └── 📂 utils/              # Utilidades comunes
-│       └── 📄 __init__.py
+│   └── 📂 utils/             # Utilidades
+│       ├── 📄 __init__.py
+│       ├── 📄 helpers.py
+│       └── 📄 validators.py
 │
-├── 📂 config/                 
+├── 📂 config/                 # Configuración (datos)
 │   ├── 📄 config.json
-│   └── 📄 selectores.json
+│   └── 📄 selectors.json     # selectores.json → inglés
 │
-├── 📂 logs/                  
-├── 📄 .env                            
-├── 📄 main.py               # Punto de entrada principal
+├── 📂 logs/                  # Logs (datos)
+│   └── 📄 .gitkeep          # Archivo para que Git trackee carpeta vacía
+│
+├── 📂 data/                  # Datos de la aplicación
+│   └── 📄 .gitkeep
+│
+├── 📄 .env                   # Variables de entorno
+├── 📄 .gitignore
 ├── 📄 requirements.txt
-└── 📄 README.md
+├── 📄 main.py               # Punto de entrada
+├── 📄 README.md
+└── 📄 setup.py              # Para instalación como paquete

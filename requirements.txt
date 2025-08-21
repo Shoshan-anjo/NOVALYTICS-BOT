@@ -1,13 +1,13 @@
 # Framework de automatización web
-playwright==1.40.0
+playwright
 
 # Manejo de variables de entorno
-python-dotenv==1.0.0
+python-dotenv
 
 # Monitoreo de archivos
-watchdog==3.0.0
+watchdog
 
 # Utilidades adicionales
 chromium                  # Navegador
-python-dateutil==2.8.2    # Para manejo de fechas
-pytz==2023.3.post1        # Para time zones
+python-dateutil           # Para manejo de fechas
+pytz                      # Para time zones
