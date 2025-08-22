@@ -12,7 +12,6 @@ Sistema de automatización y monitoreo para análisis de datos con Playwright y 
 
 ## 🏗️ Estructura del Proyecto
 
-
 ```bash
 NOVALYTICS-BOT/  
 ├── 📄 .env # Variables de entorno (NO subir a Git)  
@@ -83,7 +82,7 @@ folder = settings.shared_folder
 headless = settings.browser_headless
 
 ## 🔄 Flujo del Sistema
-
+```
 ```mermaid
 graph TD
     A[Inicio] --> B[Monitorear Carpeta]
@@ -93,5 +92,4 @@ graph TD
     D --> E[Generar Reporte]
     E --> F[Enviar Notificación]
     F --> B
-    
-
+```
