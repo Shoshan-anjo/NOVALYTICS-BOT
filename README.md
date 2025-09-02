@@ -80,9 +80,9 @@ from src.core import settings
 url = settings.base_url
 folder = settings.shared_folder
 headless = settings.browser_headless
-
-## 🔄 Flujo del Sistema
 ```
+## 🔄 Flujo del Sistema
+
 ```mermaid
 graph TD
     A[Inicio] --> B[Monitorear Carpeta]
