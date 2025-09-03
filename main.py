@@ -41,11 +41,12 @@ def main():
 
     logger.info(f"🔗 Login URL usada: {settings.login_url}")
     logger.info(f"🔗 Post-Login URL usada: {settings.post_login_url}")
+    logger.info(f"🔗 Análisis URL usada: {settings.analisis_url}")
 
-    # 🔐 Login + ir a Configuración. ¡No cerramos nada aquí!
+    # 🔐 Login + ir a Iniciar Análisis. ¡No cerramos nada aquí!
     pw, browser, context, page = demo_login()
 
-    logger.info("✅ Login completado. La ventana del navegador quedará abierta.")
+    logger.info("✅ Login completado. La ventana del navegador quedará abierta en 'Iniciar Análisis'.")
     try:
         input("⏸️  Presiona ENTER para cerrar el navegador...")
     except KeyboardInterrupt:

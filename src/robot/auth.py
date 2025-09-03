@@ -27,8 +27,7 @@ def _looks_logged_in(page) -> bool:
     """
     Heurística de login exitoso:
     - URL ya no contiene '/login'
-    - O aparece el link de configuración
-    - O aparece algún probe genérico (navbar/dashboard)
+    - O aparece algún probe del layout autenticado (navbar/dashboard)
     """
     try:
         if "/login" not in page.url.lower():
@@ -37,7 +36,7 @@ def _looks_logged_in(page) -> bool:
         pass
 
     probes = [
-        "a[href='configuracion']",
+        "a[href='iniciar-analisis']",
         "a.nav-link.active",
         ".navbar",
         "header",
@@ -132,43 +131,43 @@ def ensure_login(pw: Playwright, force: bool | None = None):
     context.storage_state(path=str(storage_path))
     return browser, context, page
 
-def go_to_configuracion(page) -> None:
+def go_to_analisis(page) -> None:
     """
-    Navega a la página de Configuración.
+    Navega a la página de Iniciar Análisis.
     - Primero intenta click en el link.
-    - Si no existe, intenta navegar por URL desde settings.configuracion_url.
+    - Si no existe, intenta navegar por URL desde settings.analisis_url.
     """
-    # Intento por click
+    # Intento por click (según tu selectors.json: a[href='iniciar-analisis'])
     try:
-        if page.query_selector("a[href='configuracion']"):
-            page.click("a[href='configuracion']")
+        if page.query_selector("a[href='iniciar-analisis']"):
+            page.click("a[href='iniciar-analisis']")
             page.wait_for_load_state("networkidle", timeout=settings.navigation_timeout)
             return
     except Exception:
         pass
 
-    # Fallback por URL
-    if settings.configuracion_url:
-        page.goto(settings.configuracion_url, wait_until="domcontentloaded", timeout=settings.navigation_timeout)
+    # Fallback por URL absoluta
+    if settings.analisis_url:
+        page.goto(settings.analisis_url, wait_until="domcontentloaded", timeout=settings.navigation_timeout)
         page.wait_for_load_state("networkidle", timeout=settings.navigation_timeout)
         return
 
-    raise RuntimeError("⚠️ No se pudo navegar a Configuración (ni por click ni por URL).")
+    raise RuntimeError("⚠️ No se pudo navegar a 'Iniciar Análisis' (ni por click ni por URL).")
 
 def demo_login():
     """
-    Arranca Playwright (sin 'with' para no cerrarlo), hace login, navega a Configuración,
+    Arranca Playwright (sin 'with' para no cerrarlo), hace login, navega a Iniciar Análisis,
     guarda screenshot y devuelve (pw, browser, context, page) SIN cerrarlos.
     """
     pw = sync_playwright().start()   # 👈 NO usamos 'with' para dejarlo vivo
     browser, context, page = ensure_login(pw)
 
-    # Ir a Configuración
-    go_to_configuracion(page)
-    print("⚙️ Navegación a Configuración exitosa.")
+    # Ir a Iniciar Análisis
+    go_to_analisis(page)
+    print("📊 Navegación a 'Iniciar Análisis' exitosa.")
 
     # Evidencia
-    out = Path("./data/screenshots/configuracion.png")
+    out = Path("./data/screenshots/analisis.png")
     out.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(out))
     print(f"📸 Screenshot guardado en: {out}")
