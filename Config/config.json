@@ -9,7 +9,7 @@
   "urls": {
     "base_url": "{{BASE_URL}}",
     "home_url": "{{BASE_URL}}",
-    "login_url": "{{BASE_URL}}/login",
+    "login_url": "{{LOGIN_URL}}",
     "configuracion_url": "{{BASE_URL}}/configuracion",
     "analisis_url": "{{BASE_URL}}/iniciar-analisis",
     "timeout": 30000,

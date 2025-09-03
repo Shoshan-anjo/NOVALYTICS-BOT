@@ -6,6 +6,14 @@
     "active_page": "a.nav-link.active"
   },
   
+  "login": {
+    "username": "#userName",
+    "password": "#password",
+    "submit": "button[type='submit'], button.custom-button",
+    "error": ".error, .alert.alert-danger, [data-test='login-error']",
+    "post_login_probe": "a.nav-link.active, .navbar, header, .dashboard"
+  },
+
   "analisis_page": {
     "parametro_select": "#parameterSelect",
     "servicio_select": "#serviceSelect",
