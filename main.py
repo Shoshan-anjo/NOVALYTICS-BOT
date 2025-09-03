@@ -35,18 +35,34 @@ def main():
     analisis_config = settings.get_analisis_config()
     logger.info(f"📊 Config análisis: {analisis_config['default_parametro']}")
 
-    # Log de URLs clave para verificar placeholders resueltos
-    logger.info(f"🔗 Login URL usada: {settings.login_url}")
-    logger.info(f"🔗 Post-Login URL usada: {settings.post_login_url}")
-
     # Verificar credenciales
     if not settings.username or not settings.password:
         logger.warning("⚠️ Credenciales no configuradas (.env o config.json)")
 
-    # 🔐 Probar login y tomar screenshot del dashboard
-    demo_login()
+    logger.info(f"🔗 Login URL usada: {settings.login_url}")
+    logger.info(f"🔗 Post-Login URL usada: {settings.post_login_url}")
 
-    logger.info("✅ Flujo completado correctamente")
+    # 🔐 Login + ir a Configuración. ¡No cerramos nada aquí!
+    pw, browser, context, page = demo_login()
+
+    logger.info("✅ Login completado. La ventana del navegador quedará abierta.")
+    try:
+        input("⏸️  Presiona ENTER para cerrar el navegador...")
+    except KeyboardInterrupt:
+        logger.info("⏹️  Interrupción recibida. Cerrando navegador...")
+    finally:
+        try:
+            context.close()
+        except Exception:
+            pass
+        try:
+            browser.close()
+        except Exception:
+            pass
+        try:
+            pw.stop()   # 👈 ahora sí detenemos Playwright
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     main()
