@@ -1,8 +1,5 @@
-"""
-Módulo core de NOVALYTICS-BOT - Configuración centralizada
-"""
-
+# src/core/__init__.py
 from .config_loader import config
 from .settings import settings
 
-__all__ = ['config', 'settings']
+__all__ = ["config", "settings"]

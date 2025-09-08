@@ -1,366 +1,247 @@
 """
-Módulo de monitoreo de archivos para NOVALYTICS-BOT
-Monitoriza una carpeta compartida en busca de nuevos archivos para procesar.
+Monitor de carpeta con Watchdog:
+- Procesa archivos ya existentes al iniciar (barrido inicial)
+- Detecta nuevos/movidos/modificados
+- Llama un callback con Path del archivo
 """
-
+import os
 import time
 import logging
 from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Dict
 from datetime import datetime
 
-# Importar configuración
+from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
+from watchdog.events import FileSystemEventHandler, FileSystemEvent
+
 from src.core import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _is_file_stable(file: Path, wait_ms: int = 800) -> bool:
+    """Verifica que el archivo haya terminado de copiarse comparando tamaños."""
+    try:
+        s1 = file.stat().st_size
+        time.sleep(max(0.05, wait_ms / 1000.0))
+        s2 = file.stat().st_size
+        return s1 == s2 and s2 > 0
+    except FileNotFoundError:
+        return False
+
+
 class FileHandler(FileSystemEventHandler):
-    """
-    Manejador de eventos de archivos para Watchdog.
-    Detecta cuando se crean o modifican archivos en la carpeta monitorizada.
-    """
-    
-    def __init__(self, callback: Callable, allowed_extensions: List[str]):
-        """
-        Inicializar el manejador de archivos.
-        
-        Args:
-            callback: Función a ejecutar cuando se detecta un archivo válido
-            allowed_extensions: Lista de extensiones permitidas
-        """
+    """Manejador de eventos: on_created / on_moved / on_modified."""
+
+    def __init__(self, callback: Callable[[Path], None], allowed_extensions: List[str], debounce_sec: float = 1.0):
         self.callback = callback
         self.allowed_extensions = [ext.lower() for ext in allowed_extensions]
-        logger.info(f"📁 Manejador inicializado para extensiones: {allowed_extensions}")
-    
-    def on_created(self, event):
-        """
-        Se ejecuta cuando se crea un nuevo archivo.
-        
-        Args:
-            event: Evento de sistema de archivos
-        """
+        self.debounce_sec = max(0.1, float(debounce_sec))
+        self._recent: Dict[Path, float] = {}
+        logger.info(f"📁 Manejador inicializado para extensiones: {self.allowed_extensions}")
+
+    def on_created(self, event: FileSystemEvent):
         if not event.is_directory:
-            self._process_file(event.src_path)
-    
-    def on_modified(self, event):
-        """
-        Se ejecuta cuando se modifica un archivo existente.
-        
-        Args:
-            event: Evento de sistema de archivos
-        """
+            self._process(Path(event.src_path))
+
+    def on_moved(self, event: FileSystemEvent):
+        if not event.is_directory and getattr(event, "dest_path", None):
+            self._process(Path(event.dest_path))
+
+    def on_modified(self, event: FileSystemEvent):
         if not event.is_directory:
-            self._process_file(event.src_path)
-    
-    def _process_file(self, file_path: str):
-        """
-        Procesar un archivo detectado.
-        
-        Args:
-            file_path: Ruta del archivo a procesar
-        """
+            self._process(Path(event.src_path))
+
+    def _process(self, file: Path):
+        """Validaciones + callback si procede."""
         try:
-            file = Path(file_path)
-            
-            # Verificar que el archivo existe y no está vacío
-            if not file.exists() or file.stat().st_size == 0:
+            # Debounce por path
+            now = time.time()
+            last = self._recent.get(file)
+            if last and (now - last) < self.debounce_sec:
                 return
-            
-            # Verificar extensión permitida
-            if not self._is_extension_allowed(file.suffix):
+            self._recent[file] = now
+
+            if not file.exists():
                 return
-            
-            # Verificar tamaño máximo
-            if not self._is_size_within_limit(file):
+
+            size = file.stat().st_size
+            if size == 0:
                 return
-            
-            # Esperar a que el archivo termine de copiarse
-            if self._is_file_locked(file):
-                logger.info(f"⏳ Archivo en uso, esperando: {file.name}")
+
+            if file.suffix.lower() not in self.allowed_extensions:
                 return
-            
-            logger.info(f"📁 Archivo detectado: {file.name} ({file.stat().st_size} bytes)")
-            
-            # Ejecutar callback con el archivo
+
+            max_mb = settings.max_file_size_mb
+            if (size / (1024 * 1024)) > max_mb:
+                logger.warning(f"⚠️ Archivo muy grande: {file.name}")
+                return
+
+            # Esperar a que termine de copiarse
+            if not _is_file_stable(file, wait_ms=max(800, settings.retry_delay_ms)):
+                time.sleep(max(0.2, settings.retry_delay_ms / 1000.0))
+                if not _is_file_stable(file, wait_ms=max(800, settings.retry_delay_ms)):
+                    logger.debug(f"⏳ Aún inestable: {file.name}")
+                    return
+
+            logger.info(f"📥 Detectado: {file.name} ({size} bytes) ruta='{file}'")
             self.callback(file)
-            
+
         except Exception as e:
-            logger.error(f"❌ Error procesando archivo {file_path}: {e}")
-    
-    def _is_extension_allowed(self, extension: str) -> bool:
-        """
-        Verificar si la extensión del archivo está permitida.
-        
-        Args:
-            extension: Extensión del archivo (ej: '.xlsx')
-            
-        Returns:
-            bool: True si la extensión está permitida
-        """
-        extension_lower = extension.lower()
-        is_allowed = extension_lower in self.allowed_extensions
-        
-        if not is_allowed:
-            logger.debug(f"📌 Extensión no permitida: {extension}")
-        
-        return is_allowed
-    
-    def _is_size_within_limit(self, file: Path) -> bool:
-        """
-        Verificar si el archivo está dentro del límite de tamaño.
-        
-        Args:
-            file: Objeto Path del archivo
-            
-        Returns:
-            bool: True si el tamaño está dentro del límite
-        """
-        max_size_mb = settings.max_file_size_mb
-        file_size_mb = file.stat().st_size / (1024 * 1024)
-        
-        if file_size_mb > max_size_mb:
-            logger.warning(f"⚠️ Archivo demasiado grande: {file.name} ({file_size_mb:.2f} MB > {max_size_mb} MB)")
-            return False
-        
-        return True
-    
-    def _is_file_locked(self, file: Path, max_attempts: int = 5, delay: float = 1.0) -> bool:
-        """
-        Verificar si el archivo está bloqueado (siendo copiado).
-        
-        Args:
-            file: Objeto Path del archivo
-            max_attempts: Intentos máximos de verificación
-            delay: Delay entre intentos en segundos
-            
-        Returns:
-            bool: True si el archivo está bloqueado
-        """
-        for attempt in range(max_attempts):
-            try:
-                # Intentar abrir el archivo en modo lectura
-                with open(file, 'rb'):
-                    pass
-                return False  # Archivo accessible
-            except (IOError, PermissionError):
-                if attempt < max_attempts - 1:
-                    time.sleep(delay)
-                else:
-                    return True  # Archivo aún bloqueado después de intentos
-        
-        return True
+            logger.error(f"❌ Error procesando archivo {file}: {e}", exc_info=True)
+
 
 class FileMonitor:
-    """
-    Monitor de carpeta compartida para detectar nuevos archivos.
-    """
-    
+    """Encapsula Observer / PollingObserver y el ciclo de vida del monitoreo."""
+
     def __init__(self):
-        """Inicializar el monitor de archivos."""
-        self.observer = None
-        self.is_monitoring = False
-        self.callback = None
-        
-        # Configuración desde settings
-        self.monitor_folder = settings.shared_folder
-        self.allowed_extensions = settings.monitoring_allowed_extensions
-        self.check_interval = settings.monitoring_interval_seconds
-        
-        logger.info(f"📋 Configuración de monitoreo:")
+        self.observer: Optional[Observer] = None
+        self.is_monitoring: bool = False
+        self.callback: Optional[Callable[[Path], None]] = None
+
+        self.monitor_folder: Path = settings.shared_folder
+        self.allowed_extensions: List[str] = settings.monitoring_allowed_extensions
+        self.check_interval: int = max(1, int(settings.monitoring_interval_seconds))
+        self.force_polling: bool = os.getenv("USE_POLLING_OBSERVER", "false").lower() == "true"
+
+        logger.info("📋 Config monitoreo:")
         logger.info(f"   📁 Carpeta: {self.monitor_folder}")
         logger.info(f"   📝 Extensiones: {self.allowed_extensions}")
         logger.info(f"   ⏰ Intervalo: {self.check_interval}s")
-    
-    def start(self, callback: Callable[[Path], None]):
-        """
-        Iniciar el monitoreo de la carpeta.
-        
-        Args:
-            callback: Función a ejecutar cuando se detecta un archivo válido
-            
-        Returns:
-            bool: True si el monitoreo se inició correctamente
-        """
+        logger.info(f"   🧰 Forzar Polling: {self.force_polling}")
+
+    def _initial_sweep(self) -> None:
+        """Procesa archivos ya existentes al iniciar (si son válidos/estables)."""
         try:
-            # Verificar que la carpeta existe
-            if not self.monitor_folder.exists():
-                logger.error(f"❌ Carpeta no existe: {self.monitor_folder}")
-                return False
-            
-            self.callback = callback
-            
-            # Crear observer y manejador
-            self.observer = Observer()
-            event_handler = FileHandler(self._handle_file, self.allowed_extensions)
-            
-            # Programar el observer
-            self.observer.schedule(
-                event_handler,
-                str(self.monitor_folder),
-                recursive=False  # No monitorear subcarpetas
-            )
-            
-            # Iniciar el observer
-            self.observer.start()
-            self.is_monitoring = True
-            
-            logger.info(f"🚀 Monitoreo iniciado en: {self.monitor_folder}")
-            logger.info("👀 Esperando nuevos archivos...")
-            
-            return True
-            
+            count = 0
+            for p in self.monitor_folder.glob("*"):
+                if not p.is_file():
+                    continue
+                if p.suffix.lower() not in [e.lower() for e in self.allowed_extensions]:
+                    continue
+                if p.stat().st_size <= 0:
+                    continue
+                if not _is_file_stable(p, wait_ms=max(800, settings.retry_delay_ms)):
+                    continue
+                logger.info(f"🔎 Barrido inicial: {p.name}")
+                self._handle_file(p)
+                count += 1
+            if count:
+                logger.info(f"✅ Barrido inicial procesó {count} archivo(s).")
+            else:
+                logger.info("ℹ️ Barrido inicial: sin archivos candidatos.")
         except Exception as e:
-            logger.error(f"❌ Error iniciando monitoreo: {e}")
+            logger.warning(f"⚠️ Error en barrido inicial: {e}", exc_info=True)
+
+    def start(self, callback: Callable[[Path], None]) -> bool:
+        """Inicia el monitoreo en la carpeta configurada."""
+        try:
+            self.monitor_folder.mkdir(parents=True, exist_ok=True)
+            self.callback = callback
+            handler = FileHandler(self._handle_file, self.allowed_extensions, debounce_sec=1.0)
+            watch_path = str(self.monitor_folder.resolve())
+
+            if self.force_polling:
+                self.observer = PollingObserver(timeout=1.0)
+                self.observer.schedule(handler, watch_path, recursive=False)
+                self.observer.start()
+                self.is_monitoring = True
+                logger.info(f"🚀 Monitoreo iniciado (PollingObserver forzado) en: {watch_path}")
+            else:
+                try:
+                    self.observer = Observer()
+                    self.observer.schedule(handler, watch_path, recursive=False)
+                    self.observer.start()
+                    self.is_monitoring = True
+                    logger.info(f"🚀 Monitoreo iniciado (Observer nativo) en: {watch_path}")
+                except Exception as native_err:
+                    logger.info(f"ℹ️ Falló Observer nativo, usando PollingObserver. Detalle: {native_err}")
+                    self.observer = PollingObserver(timeout=1.0)
+                    self.observer.schedule(handler, watch_path, recursive=False)
+                    self.observer.start()
+                    self.is_monitoring = True
+                    logger.info(f"🚀 Monitoreo iniciado (PollingObserver) en: {watch_path}")
+
+            self._initial_sweep()
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error iniciando monitoreo: {e}", exc_info=True)
             return False
-    
-    def stop(self):
-        """Detener el monitoreo."""
+
+    def stop(self) -> None:
+        """Detiene el monitoreo (seguro en errores/teardown)."""
         if self.observer and self.is_monitoring:
-            self.observer.stop()
-            self.observer.join()
-            self.is_monitoring = False
-            logger.info("⏹️ Monitoreo detenido")
-    
-    def _handle_file(self, file_path: Path):
-        """
-        Manejar archivo detectado (ejecutar callback).
-        
-        Args:
-            file_path: Ruta del archivo detectado
-        """
+            try:
+                self.observer.stop()
+                self.observer.join(timeout=3.0)
+            except Exception as e:
+                logger.warning(f"⚠️ Error al detener observer: {e}", exc_info=True)
+            finally:
+                self.is_monitoring = False
+                logger.info("⏹️ Monitoreo detenido")
+
+    def _handle_file(self, file_path: Path) -> None:
+        """Envuelve el callback del usuario con logs/seguridad."""
         try:
             if self.callback:
-                logger.info(f"🎯 Ejecutando callback para: {file_path.name}")
+                logger.info(f"🎯 Callback: {file_path.name}")
                 self.callback(file_path)
             else:
-                logger.warning("⚠️ No hay callback configurado para archivos detectados")
-                
+                logger.warning("⚠️ No hay callback configurado")
         except Exception as e:
-            logger.error(f"❌ Error en callback para {file_path.name}: {e}")
-    
-    def run_continuous(self, callback: Callable[[Path], None]):
-        """
-        Ejecutar monitoreo de forma continua.
-        
-        Args:
-            callback: Función a ejecutar cuando se detecta un archivo
-        """
+            logger.error(f"❌ Error en callback para {file_path.name}: {e}", exc_info=True)
+
+    def run_continuous(self, callback: Callable[[Path], None]) -> None:
+        """Modo bloqueante sencillo (si no usas tu propio bucle principal)."""
         if not self.start(callback):
             return
-        
         try:
             while self.is_monitoring:
                 time.sleep(self.check_interval)
-                # El monitoreo sigue activo en segundo plano
-                
-        except KeyboardInterrupt:
-            logger.info("⏹️ Monitoreo interrumpido por usuario")
-        except Exception as e:
-            logger.error(f"❌ Error en monitoreo continuo: {e}")
         finally:
             self.stop()
 
-# Funciones de utilidad para el módulo
+
+# ===== Utilidades extra =====
+
 def get_file_info(file_path: Path) -> dict:
-    """
-    Obtener información detallada de un archivo.
-    
-    Args:
-        file_path: Ruta del archivo
-        
-    Returns:
-        dict: Información del archivo
-    """
-    stat = file_path.stat()
+    """Información básica del archivo (útil para logs o UI)."""
+    st = file_path.stat()
     return {
-        'name': file_path.name,
-        'size': stat.st_size,
-        'size_mb': stat.st_size / (1024 * 1024),
-        'created': datetime.fromtimestamp(stat.st_ctime),
-        'modified': datetime.fromtimestamp(stat.st_mtime),
-        'extension': file_path.suffix.lower(),
-        'path': str(file_path)
+        "name": file_path.name,
+        "size": st.st_size,
+        "size_mb": st.st_size / (1024 * 1024),
+        "created": datetime.fromtimestamp(st.st_ctime),
+        "modified": datetime.fromtimestamp(st.st_mtime),
+        "extension": file_path.suffix.lower(),
+        "path": str(file_path),
     }
 
+
 def move_file(source: Path, destination: Path) -> bool:
-    """
-    Mover archivo a otra ubicación.
-    
-    Args:
-        source: Archivo origen
-        destination: Archivo destino
-        
-    Returns:
-        bool: True si se movió correctamente
-    """
+    """Mueve archivo de forma segura (crea destino si no existe)."""
     try:
-        # Crear directorio destino si no existe
         destination.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Mover archivo
-        source.rename(destination)
+        source.replace(destination)
         logger.info(f"📦 Archivo movido: {source.name} → {destination}")
         return True
-        
     except Exception as e:
-        logger.error(f"❌ Error moviendo archivo {source.name}: {e}")
+        logger.error(f"❌ Error moviendo {source.name}: {e}", exc_info=True)
         return False
+
 
 def archive_file(file_path: Path) -> bool:
-    """
-    Archivar archivo procesado.
-    
-    Args:
-        file_path: Ruta del archivo a archivar
-        
-    Returns:
-        bool: True si se archivó correctamente
-    """
+    """Archiva archivo en processed con timestamp."""
     if not settings.move_processed_files:
-        logger.info("📌 Archivo procesado (no se mueve por configuración)")
         return True
-    
     try:
-        # Crear nombre único para el archivo
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_name = f"{file_path.stem}_{timestamp}{file_path.suffix}"
-        destination = settings.processed_folder / new_name
-        
-        return move_file(file_path, destination)
-        
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = settings.processed_folder / f"{file_path.stem}_{ts}{file_path.suffix}"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        file_path.replace(dst)
+        logger.info(f"📦 Archivo archivado: {file_path.name} → {dst.name}")
+        return True
     except Exception as e:
-        logger.error(f"❌ Error archivando archivo {file_path.name}: {e}")
+        logger.error(f"❌ Error archivando {file_path.name}: {e}", exc_info=True)
         return False
-
-# Función principal para uso externo
-def start_file_monitoring(processing_callback: Callable[[Path], None]):
-    """
-    Iniciar monitoreo de archivos (función principal para otros módulos).
-    
-    Args:
-        processing_callback: Función que procesa los archivos detectados
-    """
-    monitor = FileMonitor()
-    
-    def wrapped_callback(file_path: Path):
-        """
-        Callback wrapper con manejo de errores y archivado.
-        """
-        try:
-            # Procesar archivo
-            processing_callback(file_path)
-            
-            # Archivar después de procesar
-            if settings.move_processed_files:
-                archive_file(file_path)
-            elif settings.delete_after_processing:
-                file_path.unlink()
-                logger.info(f"🗑️ Archivo eliminado: {file_path.name}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error procesando archivo {file_path.name}: {e}")
-    
-    # Iniciar monitoreo continuo
-    monitor.run_continuous(wrapped_callback)
