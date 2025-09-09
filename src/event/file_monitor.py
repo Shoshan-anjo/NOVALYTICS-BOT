@@ -3,9 +3,11 @@ Monitor de carpeta con Watchdog:
 - Procesa archivos ya existentes al iniciar (barrido inicial)
 - Detecta nuevos/movidos/modificados
 - Llama un callback con Path del archivo
+- Soporta shares UNC y movimientos entre volúmenes (shutil.move)
 """
 import os
 import time
+import shutil
 import logging
 from pathlib import Path
 from typing import Callable, List, Optional, Dict
@@ -96,20 +98,21 @@ class FileMonitor:
     """Encapsula Observer / PollingObserver y el ciclo de vida del monitoreo."""
 
     def __init__(self):
-        self.observer: Optional[Observer] = None
+        self.observer: Optional[Observer] = None # type: ignore
         self.is_monitoring: bool = False
         self.callback: Optional[Callable[[Path], None]] = None
 
         self.monitor_folder: Path = settings.shared_folder
         self.allowed_extensions: List[str] = settings.monitoring_allowed_extensions
         self.check_interval: int = max(1, int(settings.monitoring_interval_seconds))
-        self.force_polling: bool = os.getenv("USE_POLLING_OBSERVER", "false").lower() == "true"
+
+        # Si quieres forzar polling (más compatible en shares/red), pon True desde main
+        self.use_polling: bool = False
 
         logger.info("📋 Config monitoreo:")
         logger.info(f"   📁 Carpeta: {self.monitor_folder}")
         logger.info(f"   📝 Extensiones: {self.allowed_extensions}")
         logger.info(f"   ⏰ Intervalo: {self.check_interval}s")
-        logger.info(f"   🧰 Forzar Polling: {self.force_polling}")
 
     def _initial_sweep(self) -> None:
         """Procesa archivos ya existentes al iniciar (si son válidos/estables)."""
@@ -142,27 +145,26 @@ class FileMonitor:
             handler = FileHandler(self._handle_file, self.allowed_extensions, debounce_sec=1.0)
             watch_path = str(self.monitor_folder.resolve())
 
-            if self.force_polling:
+            try:
+                if self.use_polling:
+                    raise RuntimeError("Polling forzado por configuración")
+
+                # Observer nativo
+                self.observer = Observer()
+                self.observer.schedule(handler, watch_path, recursive=False)
+                self.observer.start()
+                self.is_monitoring = True
+                logger.info(f"🚀 Monitoreo iniciado (Observer nativo) en: {watch_path}")
+            except Exception as native_err:
+                # Fallback: polling (ideal para UNC/SMB)
+                logger.warning(f"⚠️ Falló Observer nativo → PollingObserver: {native_err}")
                 self.observer = PollingObserver(timeout=1.0)
                 self.observer.schedule(handler, watch_path, recursive=False)
                 self.observer.start()
                 self.is_monitoring = True
-                logger.info(f"🚀 Monitoreo iniciado (PollingObserver forzado) en: {watch_path}")
-            else:
-                try:
-                    self.observer = Observer()
-                    self.observer.schedule(handler, watch_path, recursive=False)
-                    self.observer.start()
-                    self.is_monitoring = True
-                    logger.info(f"🚀 Monitoreo iniciado (Observer nativo) en: {watch_path}")
-                except Exception as native_err:
-                    logger.info(f"ℹ️ Falló Observer nativo, usando PollingObserver. Detalle: {native_err}")
-                    self.observer = PollingObserver(timeout=1.0)
-                    self.observer.schedule(handler, watch_path, recursive=False)
-                    self.observer.start()
-                    self.is_monitoring = True
-                    logger.info(f"🚀 Monitoreo iniciado (PollingObserver) en: {watch_path}")
+                logger.info(f"🚀 Monitoreo iniciado (PollingObserver) en: {watch_path}")
 
+            # Barrido inicial
             self._initial_sweep()
             return True
         except Exception as e:
@@ -220,28 +222,31 @@ def get_file_info(file_path: Path) -> dict:
 
 
 def move_file(source: Path, destination: Path) -> bool:
-    """Mueve archivo de forma segura (crea destino si no existe)."""
+    """
+    Mover archivo de forma segura (soporta cross-volume/UNC).
+    Usa shutil.move: si es otro volumen, copia y luego elimina.
+    """
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        source.replace(destination)
+        shutil.move(str(source), str(destination))
         logger.info(f"📦 Archivo movido: {source.name} → {destination}")
         return True
     except Exception as e:
-        logger.error(f"❌ Error moviendo {source.name}: {e}", exc_info=True)
+        logger.error(f"❌ Error moviendo {source.name} → {destination}: {e}", exc_info=True)
         return False
 
 
 def archive_file(file_path: Path) -> bool:
-    """Archiva archivo en processed con timestamp."""
+    """
+    Mover a processed con sufijo timestamp (respetando settings.move_processed_files).
+    Usa move_file (shutil.move) para soportar UNC/otra unidad.
+    """
     if not settings.move_processed_files:
         return True
     try:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         dst = settings.processed_folder / f"{file_path.stem}_{ts}{file_path.suffix}"
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        file_path.replace(dst)
-        logger.info(f"📦 Archivo archivado: {file_path.name} → {dst.name}")
-        return True
+        return move_file(file_path, dst)
     except Exception as e:
         logger.error(f"❌ Error archivando {file_path.name}: {e}", exc_info=True)
         return False

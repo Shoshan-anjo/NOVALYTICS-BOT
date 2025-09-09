@@ -13,13 +13,14 @@
     "error": ".error, .alert.alert-danger, [data-test='login-error']",
     "post_login_probe": "a.nav-link.active, .navbar, header, .dashboard"
   },
-
   "analisis_page": {
+    "nav_analisis": "a[href='iniciar-analisis']",
     "parametro_select": "#parameterSelect",
     "servicio_select": "#serviceSelect",
-    "file_input": "input[type='file']",
+    "upload_label": "label.upload-btn",
+    "file_input": "label.upload-btn input[type='file'], input[type='file'][accept*='.xls']",
     "file_name_display": "#file-name",
-    "upload_button": "label.upload-btn",
-    "submit_button": "button.custom-button"
+    "start_power_btn_all": "button.custom-button:has(i.bi-power)",
+    "start_power_btn_enabled": "button.custom-button:has(i.bi-power):not([disabled])"
   }
 }

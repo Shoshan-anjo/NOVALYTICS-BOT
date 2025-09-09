@@ -17,7 +17,7 @@
   },
 
   "paths": {
-    "shared_folder": "{{SHARED_FOLDER}}",
+    "shared_folder": "\\\\192.168.100.39\\callcenter Guatemala\\Speech_Anality\\Speech",
     "downloads_folder": "./data/downloads",
     "uploads_folder": "./data/uploads",
     "screenshots_folder": "./data/screenshots",
@@ -48,7 +48,7 @@
     "allowed_extensions": [".xlsx", ".xls", ".csv"],
     "delete_after_processing": false,
     "move_processed_files": true,
-    "processed_folder": "./data/processed"
+    "processed_folder": "\\\\192.168.100.39\\callcenter Guatemala\\Speech_Anality\\Speech\\Procesados"
   },
 
   "retry": {
