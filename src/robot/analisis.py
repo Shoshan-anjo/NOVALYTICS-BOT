@@ -6,12 +6,12 @@ Módulo de automatización para la página 'Iniciar análisis'.
 - Click en el botón correcto 'Iniciar' (i.bi-power) cuando esté habilitado
 """
 
-import logging
 from pathlib import Path
 from time import sleep
 from typing import Optional, List, Dict, Tuple
+import logging
 
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from src.core import settings
 
 logger = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ def _click_iniciar(page: Page) -> None:
             }""",
             timeout=max(800, min(settings.wait_after_upload_ms, 4000))
         )
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         pass
 
     btn = page.query_selector(SEL_INICIAR_POWER_BTN_ENABLED)
@@ -221,20 +221,20 @@ def _click_iniciar(page: Page) -> None:
 
     try:
         btn.click()
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         sleep(0.1)
         btn.click()
 
     try:
         page.wait_for_load_state("networkidle", timeout=max(1200, min(settings.wait_after_submit_ms, 5000)))
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         pass
 
     logger.info("▶️ Click en 'Iniciar' ejecutado en el botón correcto (i.bi-power).")
 
 
 # ---------- Flujo principal ----------
-def perform_upload(page: Page, file_path: Path) -> None:
+def perform_upload(page: Page, file_path: Path, max_retries: int = 3, timeout: int = 30000) -> None:
     """
     Flujo:
       - Ir a iniciar-analisis
@@ -254,14 +254,14 @@ def perform_upload(page: Page, file_path: Path) -> None:
             except Exception as e:
                 logger.warning(f"⚠️ No se encontró 'Escuchar Reclamos' por value/label, se elegirá la primera opción válida. Detalle: {e}")
                 _set_select_exact(page, SEL_PARAMETRO, preferred_value=None, preferred_label=None, nombre="Parámetro")
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         logger.warning("⚠️ Parámetro: no se encontró a tiempo.")
 
     # Servicio (si existe)
     try:
         if page.query_selector(SEL_SERVICIO):
             _set_select_exact(page, SEL_SERVICIO, preferred_value=str(settings.default_servicio), preferred_label=str(settings.default_servicio), nombre="Servicio")
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         logger.warning("⚠️ Servicio: no se encontró a tiempo.")
 
     # Adjuntar archivo

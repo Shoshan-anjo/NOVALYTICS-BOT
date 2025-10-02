@@ -4,7 +4,7 @@ Usa los selectores del login: #userName y #password (según tu HTML).
 """
 
 from pathlib import Path
-from playwright.sync_api import Playwright, sync_playwright, TimeoutError as PWTimeoutError
+from playwright.sync_api import Playwright, sync_playwright, TimeoutError as PlaywrightTimeoutError
 from src.core import settings
 from src.core.settings import has_placeholder  # función auxiliar de settings
 
@@ -68,7 +68,7 @@ def ensure_login(pw: Playwright, force: bool | None = None):
     # Verificar login
     try:
         page.wait_for_load_state("networkidle", timeout=settings.login_timeout_ms)
-    except PWTimeoutError:
+    except PlaywrightTimeoutError:
         pass
 
     # Guardar storage_state
