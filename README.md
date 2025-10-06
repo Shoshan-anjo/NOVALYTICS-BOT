@@ -89,7 +89,7 @@ graph TD
     B --> C{¿Nuevo archivo?}
     C -->|Sí| D[Ejecutar Análisis]
     C -->|No| B
-    D --> E[Generar Reporte]
-    E --> F[Enviar Notificación]
+    D --> E[No hay mas archivos?]
+    E --> F[Fin del Proceso]
     F --> B
 ```
